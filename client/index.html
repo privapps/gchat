@@ -18,6 +18,17 @@
             background-color: #efefff;
             margin: 5px;
             padding: 5px;
+            border-radius: 10px;
+            clear: both;
+            width: 100%;
+        }
+        
+        #html_info {
+            display: none;
+            padding: 0 30px 0 30px;
+            font-size: xx-small;
+            background-color: #eff;
+            text-align: center;
         }
         
         input[type="text"]:disabled {
@@ -60,10 +71,10 @@
             <input type="text" placeholder="Message. Enter to send" id='html_message'>
         </div>
     </div>
-    <div id="html_help">
+    <div id="html_help" class="flex">
         <article class="card">
             <header>
-                <h3>An adhok end to end encrypted group chat</h3>
+                <h3>An ad hok end to end encrypted group chat</h3>
             </header>
             <p>
                 It offers a dependable group chat system with end-to-end encryption. This functionality is facilitated through WebSocket technology and messaging protocols.</p>
@@ -74,12 +85,14 @@
                     <li>Upon establishing a connection, your browser's URL will automatically update. You can readily distribute this modified URL to other participants for seamless integration.</li>
             </ul>
             <p>To transmit a message, simply input your text and press "Enter."</p>
+            <p>If you see `** unkown message **`, possiblely, someone is sending messages into same room with different secret key. In this case, they can not see you content and neither can you.</p>
             <p>Messages are encrypted using a symmetric key before dissemination to other participants, ensuring privacy and security throughout the communication process.</p>
             <p>From a technical standpoint, the client employs plain JavaScript for message encryption, while the server utilizes WebSocket, known for its reliability compared to WebRTC, to route and broadcast messages to the channel.</p>
             <p>Source code is at <a href="https://github.com/privapps/gchat">GitHub</a></p>
         </article>
     </div>
-    <div id='html_talks'>
+    <div id="html_info" class="flex"></div>
+    <div id='html_talks' class="flex">
         <!--This will be added by JavaScript -->
     </div>
     <script>
@@ -168,7 +181,7 @@
 
             wssocket.onerror = function(error) {
                 console.error('WebSocket error:', error);
-                switchControls(false)
+                disconnect(null)
             };
 
             const socket = wssocket
@@ -179,6 +192,7 @@
                     action: 'subscribe',
                     topic: channel
                 });
+                html_talks.innerHTML = ''
                 socket.send(cc)
                 send2Server(`** ${html_your_id.value} joined **`)
             }
@@ -194,13 +208,14 @@
                     decrypt2Str(event.data, cypher_key).then(data => {
                         addPreBlock(data)
                     }).catch(err => {
-                        console.log(err)
-                            // addPreBlock('** unknow message **')
+                        console.log(err, event.data)
+                        addPreBlock('** unknow message **')
                     })
                 }
             }
             socket.onclose = function() {
                 console.log("connection closed")
+                disconnect(null)
             };
         }
 
@@ -227,7 +242,12 @@
                 "message": out_message
             })
             if (wssocket != null) {
-                wssocket.send(json)
+                try {
+                    wssocket.send(json)
+                } catch (err) {
+                    console.log(err)
+                    disconnect(null)
+                }
             }
         }
 
@@ -240,15 +260,18 @@
             var block = document.createElement('span');
             block.textContent = sanitizedContent;
 
-            html_talks.insertBefore(block, html_talks.firstChild)
+
 
             // add some fancy css todo
             const pattern = /^\*\* .* \*\*$/;
             if (pattern.test(sanitizedContent)) {
-                block.style.backgroundColor = '#fef';
-                block.style.textAlign = 'center';
-                block.style.fontSize = '70%';
+                html_info.style.display = 'block';
+                html_info.textContent = sanitizedContent;
+                setTimeout(function() {
+                    html_info.style.display = 'none';
+                }, 5000); // 5000 milliseconds = 5 seconds
             } else {
+                html_talks.insertBefore(block, html_talks.firstChild)
                 if (sanitizedContent.startsWith(`${html_your_id.value}: `)) {
                     block.style.textAlign = 'right';
                     block.style.backgroundColor = '#efe';
