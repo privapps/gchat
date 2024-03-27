@@ -76,6 +76,7 @@
             <p>To transmit a message, simply input your text and press "Enter."</p>
             <p>Messages are encrypted using a symmetric key before dissemination to other participants, ensuring privacy and security throughout the communication process.</p>
             <p>From a technical standpoint, the client employs plain JavaScript for message encryption, while the server utilizes WebSocket, known for its reliability compared to WebRTC, to route and broadcast messages to the channel.</p>
+            <p>Source code is at <a href="https://github.com/privapps/gchat">GitHub</a></p>
         </article>
     </div>
     <div id='html_talks'>
@@ -194,7 +195,7 @@
                         addPreBlock(data)
                     }).catch(err => {
                         console.log(err)
-                        addPreBlock('** unknow message **')
+                            // addPreBlock('** unknow message **')
                     })
                 }
             }
@@ -231,7 +232,10 @@
         }
 
         function addPreBlock(content) {
-            sanitizedContent = content
+            var temp = document.createElement('div');
+            temp.textContent = content;
+
+            sanitizedContent = temp.innerHTML
                 // Create a <span> block
             var block = document.createElement('span');
             block.textContent = sanitizedContent;
@@ -262,7 +266,9 @@
                     // Wrap the text before ':' in a <b> element
                     block.innerHTML = '<b>' + textBeforeColon + '</b>: ' + textAfterColon;
                 }
+
             }
+            block.innerHTML += `<br><small style="font-size: 70%; color: #999">${new Date().toLocaleTimeString()}</small>`
         }
 
         async function exit() {
