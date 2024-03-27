@@ -1,0 +1,286 @@
+<html>
+
+<head>
+    <title>End to End Encrypted Group Chat</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="//cdn.jsdelivr.net/npm/picnic@7.1.0/picnic.min.css" rel="stylesheet">
+    <style>
+        body,
+        input,
+        button {
+            font-size: 15px;
+            margin: 2px;
+        }
+        
+        #html_talks span {
+            display: block;
+            background-color: #efefff;
+            margin: 5px;
+            padding: 5px;
+        }
+        
+        input[type="text"]:disabled {
+            background-color: #e2e2e2;
+            /* Light gray background color */
+            color: #555;
+            /* Dark gray text color */
+        }
+        
+        input[type="text"]::placeholder {
+            color: #aaa;
+        }
+    </style>
+    <script src="js/cypher.js"></script>
+</head>
+
+<body>
+    <div class="flex four" id="controls">
+        <div>
+            <small><label for="html_your_id">Your ID</label></small><br/>
+            <input type="text" placeholder="Your ID" id='html_your_id'>
+        </div>
+        <div>
+            <small><label for="html_room_id">Room ID</label></small><br/>
+            <input type="text" placeholder="Room ID" id='html_room_id'>
+        </div>
+        <div>
+            <small><label for="html_secret">Secret Key</label></small><br/>
+            <input type="text" placeholder="Secrets. Has to be same for all users in room" id='html_secret'>
+        </div>
+        <div>
+            <small><label>Start/Stop</label></small><br/>
+            <button onclick='connect(this)' id='html_connect_btn' data-tooltip="your name, room, secrets. Url will be update after connect" class="tooltip-left">Connect</button>
+            <button onclick='disconnect(this)' id='html_disconnect_btn' style="display: none;" class="warning">Disconnect</button>
+        </div>
+    </div>
+
+    <div class="flex">
+        <div>
+            <input type="text" placeholder="Message. Enter to send" id='html_message'>
+        </div>
+    </div>
+    <div id="html_help">
+        <article class="card">
+            <header>
+                <h3>An adhok end to end encrypted group chat</h3>
+            </header>
+            <p>
+                It offers a dependable group chat system with end-to-end encryption. This functionality is facilitated through WebSocket technology and messaging protocols.</p>
+            <ul>
+                <li>Your ID serves as your username, allowing any characters except :.</li>
+                <li>The room designation is essential for joining the chat, requiring all participants to converge in the same room.
+                    <li>Each participant utilizes a shared secret key to generate encryption keys for message security, ensuring uniformity among all chat members.</li>
+                    <li>Upon establishing a connection, your browser's URL will automatically update. You can readily distribute this modified URL to other participants for seamless integration.</li>
+            </ul>
+            <p>To transmit a message, simply input your text and press "Enter."</p>
+            <p>Messages are encrypted using a symmetric key before dissemination to other participants, ensuring privacy and security throughout the communication process.</p>
+            <p>From a technical standpoint, the client employs plain JavaScript for message encryption, while the server utilizes WebSocket, known for its reliability compared to WebRTC, to route and broadcast messages to the channel.</p>
+        </article>
+    </div>
+    <div id='html_talks'>
+        <!--This will be added by JavaScript -->
+    </div>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            var hash = window.location.hash.substring(1); // Get the hash value excluding the '#'
+            var params = {}; // Object to store parameters
+
+            if (hash) {
+                // Split the hash string into key-value pairs
+                hash.split('&').forEach(function(item) {
+                    var pair = item.split('=');
+                    if (pair.length === 2) {
+                        var key = pair[0];
+                        var value = decodeURIComponent(pair[1]);
+                        params[key] = value;
+                    }
+                });
+            }
+
+            // Now you can access the values for room and secret
+            var room = params.room;
+            var secret = params.secret;
+            predefined = false
+                // Example usage:
+            if (room !== undefined) {
+                html_room_id.value = room
+                predefined = true
+            }
+
+            if (secret !== undefined) {
+                html_secret.value = secret
+                predefined = true
+            }
+
+            if (!predefined) {
+                console.log()
+                sha256(new Date().toISOString()).then(salt => {
+                    html_room_id.value = salt.substring(5, 10)
+                    html_secret.value = salt.substring(10, 15)
+                })
+            }
+            html_message.disabled = true
+        });
+
+        function setHash(params) {
+            var hash = '';
+            for (var key in params) {
+                if (params.hasOwnProperty(key)) {
+                    if (hash !== '') {
+                        hash += '&';
+                    }
+                    hash += key + '=' + encodeURIComponent(params[key]);
+                }
+            }
+            window.location.hash = hash;
+        }
+
+        let wssocket = null,
+            channel = null,
+            cypher_key = null
+
+        function switchControls(flag) {
+            var inputs = controls.getElementsByTagName('input');
+            for (var i = 0; i < inputs.length; i++) {
+                inputs[i].disabled = flag;
+            }
+            html_message.disabled = !flag
+            if (flag) {
+                html_connect_btn.style.display = 'none'
+                html_disconnect_btn.style.display = 'inline-block'
+            } else {
+                html_connect_btn.style.display = 'inline-block'
+                html_disconnect_btn.style.display = 'none'
+            }
+        }
+
+        async function connect(html_connect_btn) {
+            if (html_your_id.value === '' || html_room_id.value === '' || html_secret.value === '') {
+                return
+            }
+            html_your_id.value = html_your_id.value.replace(/:/g, '')
+            wssocket = new WebSocket("wss://0h0.alwaysdata.net/ws_pubsub")
+            channel = await sha256(html_room_id.value)
+            cypher_key = await generateKeyFromSeed(html_secret.value, channel)
+            html_help.style.display = 'none'
+
+            wssocket.onerror = function(error) {
+                console.error('WebSocket error:', error);
+                switchControls(false)
+            };
+
+            const socket = wssocket
+            socket.onopen = function() {
+                console.log("connection open")
+
+                const cc = JSON.stringify({
+                    action: 'subscribe',
+                    topic: channel
+                });
+                socket.send(cc)
+                send2Server(`** ${html_your_id.value} joined **`)
+            }
+            socket.onmessage = function(event) {
+                // console.log('recieve: ' + event.data)
+                if (event.data === 'OK') {
+                    switchControls(true)
+                    setHash({
+                        room: html_room_id.value,
+                        secret: html_secret.value
+                    })
+                } else {
+                    decrypt2Str(event.data, cypher_key).then(data => {
+                        addPreBlock(data)
+                    }).catch(err => {
+                        console.log(err)
+                        addPreBlock('** unknow message **')
+                    })
+                }
+            }
+            socket.onclose = function() {
+                console.log("connection closed")
+            };
+        }
+
+        function disconnect(html_disconnect_btn) {
+            // html_talks.textContent = ''
+            switchControls(false)
+            exit()
+        }
+
+        // Send your message
+        async function send(msg = html_message.value) {
+            if (msg === '') {
+                return
+            }
+            full_message = `${html_your_id.value}: ${msg}`
+            send2Server(full_message)
+        }
+
+        async function send2Server(full_message) {
+            out_message = await encrypt2Str(full_message, cypher_key)
+            const json = JSON.stringify({
+                "action": "publish",
+                "topic": channel,
+                "message": out_message
+            })
+            if (wssocket != null) {
+                wssocket.send(json)
+            }
+        }
+
+        function addPreBlock(content) {
+            sanitizedContent = content
+                // Create a <span> block
+            var block = document.createElement('span');
+            block.textContent = sanitizedContent;
+
+            html_talks.insertBefore(block, html_talks.firstChild)
+
+            // add some fancy css todo
+            const pattern = /^\*\* .* \*\*$/;
+            if (pattern.test(sanitizedContent)) {
+                block.style.backgroundColor = '#fef';
+                block.style.textAlign = 'center';
+                block.style.fontSize = '70%';
+            } else {
+                if (sanitizedContent.startsWith(`${html_your_id.value}: `)) {
+                    block.style.textAlign = 'right';
+                    block.style.backgroundColor = '#efe';
+                }
+                const colonIndex = sanitizedContent.indexOf(':');
+
+                // If ':' is found
+                if (colonIndex !== -1) {
+                    // Get the text before the ':' character
+                    const textBeforeColon = sanitizedContent.substring(0, colonIndex).trim();
+
+                    // Get the text after the ':' character
+                    const textAfterColon = sanitizedContent.substring(colonIndex + 1).trim();
+
+                    // Wrap the text before ':' in a <b> element
+                    block.innerHTML = '<b>' + textBeforeColon + '</b>: ' + textAfterColon;
+                }
+            }
+        }
+
+        async function exit() {
+            if (wssocket != null && wssocket.readyState == 1) {
+                send2Server(`** ${html_your_id.value} left **`).then(() => wssocket.close())
+            }
+        }
+        window.addEventListener('beforeunload', function(event) {
+            exit()
+
+            // Chrome requires returnValue to be set
+            event.returnValue = '';
+        });
+        window.html_message.onkeyup = (ev) => {
+            if (ev.key === 'Enter') {
+                send().then(() => html_message.value = '')
+            }
+        }
+    </script>
+</body>
+<html>
