@@ -1,4 +1,4 @@
-## Adhoc E2E Encrypted Group Chat
+## Ad hoc E2E Encrypted Group Chat
 
 ### What
 This project is a fully functional, minimalist, ad hoc, end-to-end encrypted web group chat. It uses websocket for all message delivery which is more reliable than WebRTC.
@@ -22,3 +22,4 @@ A live demo is at https://privapps.github.io/gchat/
 
 For a more completed robusted solution, I would recommand to use [Ergo](https://github.com/ergochat/ergo) as backend and [Kiwi](https://kiwiirc.com/) as front end. A low end 100 MB RAM server can handle thousands of users.
 
+If you are a big fan of building up a robust websocket chat solution, take a look at [this tutorial](https://centrifugal.dev/docs/tutorial/intro)
